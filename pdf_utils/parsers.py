@@ -1,5 +1,6 @@
 from pdfminer.high_level import extract_text
 import fitz  # PyMuPDF
+import os
 
 
 def get_pdf_file_contents(pdf_filepath: str):
@@ -24,3 +25,13 @@ def parse_pdf_with_pymupdf(pdf_path):
 
     doc.close()
     return text
+
+
+def get_pdf_file_size(pdf_file_path):
+    try:
+        # Get the size of the file in bytes
+        size_bytes = os.path.getsize(pdf_file_path)
+        return size_bytes
+    except FileNotFoundError:
+        print(f"File not found: {pdf_file_path}")
+        return None

@@ -1,7 +1,8 @@
 import glob
 import os
 
-def get_pdf_files(directory):
+
+def get_pdf_files(directory: str) -> list[str]:
     # Expand the tilde in the directory path
     expanded_path = os.path.expanduser(directory)
 
