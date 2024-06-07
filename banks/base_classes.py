@@ -4,10 +4,13 @@ from abc import ABC
 from datetime import datetime
 from typing import Union
 
+from common.utils import convert_bytes_to_human_readable
 from pdf_utils.parsers import parse_pdf_with_pymupdf, get_pdf_file_size
 
 
 class BankAccountStatePDF(ABC):
+
+    _SEPARATOR = f"-"*70
 
     BANK_NAME = None
     BANK_SHORT_NAME = None
@@ -20,8 +23,23 @@ class BankAccountStatePDF(ABC):
     PATTERN_NUMERO_DE_CLIENTE = None
     PATTERN_NUMERO_DE_TARJETA = None
 
+    _SHORT_MONTH_MAPPING_ESP_TO_ENG = {
+        'ene': 'enero',
+        'feb': 'febrero',
+        'mar': 'marzo',
+        'abr': 'abril',
+        'may': 'mayo',
+        'jun': 'junio',
+        'jul': 'julio',
+        'ago': 'agosto',
+        'sep': 'septiembre',
+        'oct': 'octubre',
+        'nov': 'noviembre',
+        'dic': 'diciembre'
+    }
+
     # Map Spanish month names to English month names
-    _MONTH_MAPPING = {
+    _MONTH_MAPPING_ESP_TO_ENG = {
         'enero': 'January',
         'febrero': 'February',
         'marzo': 'March',
@@ -51,13 +69,34 @@ class BankAccountStatePDF(ABC):
         12: 'Diciembre',
     }
 
-    def __init__(self, pdf_file_path):
+    # Regex Patterns for dates
+    RE_PATTERN__DD_AL_DD_MONTH_DE_YYYY = r'^(\d{2})\s*al\s*(\d{2})\s*de\s*(\w+)+\s*de\s*(\d{4})$'
+    RE_PATTERN__DD_DE_MONTH_DE_YYYY = r'^(\d{1,2})\s*de\s*(\w+)+\s*de\s*(\d{4})$'
+    RE_PATTERN__DD_DE_MONTH_AL_DD_DE_MONTH_DE_YYYY = (
+        r'^(\d{1,2})\s*de\s*(\w+)\s*al\s*(\d{1,2})\s*de\s*(\w+)+\s*de[l]?\s*(\d{4})$'
+    )
+    RE_PATTERN__DD_DE_MONTH_DEL_YYYY_AL_DD_DE_MONTH_DEL_YYYY = (
+        r'^(\d{1,2})\s*de\s*(\w+)+\s*de[l]?\s*(\d{4})\s*al\s*(\d{1,2})\s*de\s*(\w+)+\s*de[l]?\s*(\d{4})$'
+    )
+    RE_PATTERN__DD_x_MONTH_x_YYYY_AL_DD_x_MONTH_x_YYYY = (
+        r'^(\d{1,2})\-(\w+)\-(\d{4})\s*al\s*(\d{1,2})\-(\w+)\-(\d{4})$'
+    )
+    RE_PATTERN__DD_x_MONTH_x_YYYY = (
+        r'^(\d{1,2})\-(\w+)\-(\d{4})$'
+    )
+
+    def __init__(self, pdf_file_path: str, raw_file_contents: str = None, is_image_pdf: bool = False):
         self._bank_name = self.BANK_NAME
         self._bank_short_name = self.BANK_SHORT_NAME
         self.pdf_file_path = pdf_file_path
-        self.pdf_file_basename = os.path.basename(pdf_file_path)
-        self.pdf_file_dir_name = os.path.dirname(pdf_file_path)
-        self.raw_pdf_file_contents = self._load_raw_pdf_file_contents()
+        self.pdf_file_basename = str(os.path.basename(pdf_file_path))
+        self.pdf_file_dir_name = str(os.path.dirname(pdf_file_path))
+        self.is_image_pdf = is_image_pdf
+
+        # Load the raw file contents if not provided
+        if raw_file_contents is None:
+            self.raw_pdf_file_contents = self._load_raw_pdf_file_contents()
+        self.raw_pdf_file_contents = raw_file_contents
 
         self.raw_data = {}
 
@@ -73,7 +112,10 @@ class BankAccountStatePDF(ABC):
         self.month_name = None  # type: Union[str, None]
         self.month_short_name = None  # type: Union[str, None]
 
-        self.file_size = get_pdf_file_size(pdf_file_path)
+        self.file_size_in_bytes = get_pdf_file_size(pdf_file_path)
+        self.file_size_human_readable = convert_bytes_to_human_readable(
+            self.file_size_in_bytes
+        )
 
         # parse the pdf file and load the data into the instance
         self.load_bank_data_from_pdf()
@@ -127,10 +169,12 @@ class BankAccountStatePDF(ABC):
     def get_pdf_file_path(self):
         return self.pdf_file_path
 
-    def get_fecha_de_corte(self):
+    def get_fecha_de_corte(self, month_as_name: bool = False):
+        if month_as_name:
+            self.fecha_de_corte.strftime('%Y-%M-%d')
         return self.fecha_de_corte.strftime('%Y-%m-%d')
 
-    def get_date_periodo_inicio(self):
+    def get_periodo_inicio(self):
         return self.periodo_inicio.strftime('%Y-%m-%d')
 
     def get_periodo_termino(self):
@@ -158,7 +202,7 @@ class BankAccountStatePDF(ABC):
         return (
             f"{self.get_bank_short_name()}_"
             f"{self.get_account_type_name()}__"
-            f"{self.get_date_periodo_inicio()}__"
+            f"{self.get_periodo_inicio()}__"
             f"{self.month_short_name}"
         )
 
@@ -166,17 +210,28 @@ class BankAccountStatePDF(ABC):
         return (
             f"{self.get_bank_name()}__"
             f"{self.numero_de_cuenta}__"
-            f"{self.get_date_periodo_inicio()}__"
+            f"{self.get_periodo_inicio()}__"
             f"{self.get_periodo_termino()}"
         )
 
     def get_unique_file_id(self) -> str:
         return (
             f"{self.get_bank_name()}__"
-            f"{self.get_date_periodo_inicio()}__"
+            f"{self.get_periodo_inicio()}__"
             f"{self.get_periodo_termino()}__"
             f"corte__{self.get_fecha_de_corte()}__"
-            f"size__{self.file_size}"
+            f"size__{self.file_size_in_bytes}"
+        )
+
+    def get_detail_report(self):
+        return (
+            f"{self._SEPARATOR}\n"
+            f"[PDF]: '{self.pdf_file_basename}'\n"
+            f" > [Banco]: '{self.get_bank_name()}'\n"
+            f" > [Fecha-Corte]: '{self.get_fecha_de_corte()}'\n"
+            f" > [Periodo-Reporte]: '{self.get_periodo_inicio()}' -> '{self.get_periodo_termino()}'\n"
+            f" > [Fecha-Reporte]: '{self.month_name}'\n"
+            f"{self._SEPARATOR}\n"
         )
 
     def auto_rename_file_name(self):
@@ -185,6 +240,7 @@ class BankAccountStatePDF(ABC):
             if self.pdf_file_basename != new_file_name:
                 print(f"[auto-rename] '{self.pdf_file_path}' -> '{new_file_name}'")
                 os.rename(self.pdf_file_path, new_file_name)
+                return new_file_name
 
     @classmethod
     def keywords_found_in_pdf_contents(cls, pdf_contents: str):
@@ -200,22 +256,23 @@ class BankAccountStatePDF(ABC):
             '4 de febrero al 3 de marzo del 2024'
         """
         date_period_string = date_period_string.lower()
+        date_data = cls.get_datetime_data_from_date_string(date_period_string)
 
-        # Replace ('al', 'de', 'del') with an empty string and remove leading/trailing spaces
-        cleaned_date = date_period_string.replace('al', '').strip()
-        cleaned_date = cleaned_date.replace('del', '').strip()
-        cleaned_date = cleaned_date.replace('de', '').strip()
-        cleaned_date = ' '.join(cleaned_date.split())
+        start_day = date_data.get('start_day')
+        start_month = date_data.get('start_month')
+        end_day = date_data.get('end_day')
+        end_month = date_data.get('end_month')
+        year = date_data.get('year')
 
-        year = cleaned_date.split()[-1]
+        # Handle year offset in case of December being the start month
+        # and January being the end month.
+        # e.g. '4 de diciembre al 3 de enero del 2024'
+        year_offset = 0
+        if start_month.lower() == 'diciembre' and end_month.lower() == 'enero':
+            year_offset = 1
 
-        cleaned_date = cleaned_date.replace(year, '').strip()
-
-        start_date_str = ' '.join(cleaned_date.split()[:2])
-        end_date_str = ' '.join(cleaned_date.split()[-2:])
-
-        start_date_str = f"{start_date_str} {year}"
-        end_date_str = f"{end_date_str} {year}"
+        start_date_str = f"{start_day} de {start_month} de {int(year)-year_offset}"
+        end_date_str = f"{end_day} de {end_month} de {year}"
 
         # Create datetime objects
         start_date = cls.format_date_string_into_datetime(start_date_str)
@@ -224,36 +281,94 @@ class BankAccountStatePDF(ABC):
         return start_date, end_date
 
     @classmethod
-    def format_date_string_into_datetime(cls, date_string):
+    def get_regex_pattern_from_date_string(cls, date_string):
+        date_string = date_string.lower()
+        pattern = None
+        if re.match(cls.RE_PATTERN__DD_AL_DD_MONTH_DE_YYYY, date_string):
+            pattern = cls.RE_PATTERN__DD_AL_DD_MONTH_DE_YYYY
+        elif re.match(cls.RE_PATTERN__DD_DE_MONTH_DE_YYYY, date_string):
+            pattern = cls.RE_PATTERN__DD_DE_MONTH_DE_YYYY
+        elif re.match(cls.RE_PATTERN__DD_DE_MONTH_AL_DD_DE_MONTH_DE_YYYY, date_string):
+            pattern = cls.RE_PATTERN__DD_DE_MONTH_AL_DD_DE_MONTH_DE_YYYY
+        elif re.match(cls.RE_PATTERN__DD_DE_MONTH_DEL_YYYY_AL_DD_DE_MONTH_DEL_YYYY, date_string):
+            pattern = cls.RE_PATTERN__DD_DE_MONTH_DEL_YYYY_AL_DD_DE_MONTH_DEL_YYYY
+        elif re.match(cls.RE_PATTERN__DD_x_MONTH_x_YYYY_AL_DD_x_MONTH_x_YYYY, date_string):
+            pattern = cls.RE_PATTERN__DD_x_MONTH_x_YYYY_AL_DD_x_MONTH_x_YYYY
+        elif re.match(cls.RE_PATTERN__DD_x_MONTH_x_YYYY, date_string):
+            pattern = cls.RE_PATTERN__DD_x_MONTH_x_YYYY
+        if not pattern:
+            raise RuntimeError(
+                f"RE Pattern not supported for date string value: '{date_string}'"
+            )
+        return pattern
 
-        day = None
-        month = None
+    @classmethod
+    def get_datetime_data_from_date_string(cls, date_string) -> dict:
+
+        start_day = None
+        start_month = None
+        end_day = None
+        end_month = None
         year = None
 
-        split_by = ' '
-        if 'de' in date_string:
-            split_by = ' de '
+        regex_pattern = cls.get_regex_pattern_from_date_string(date_string)
+        match_pattern = re.match(regex_pattern, date_string.lower())
 
-        pattern_dd_al_dd_month_de_yyyy = r'^(\d{2})\s*al\s*(\d{2})\s*de\s*(\w+)+\s*de\s*(\d{4})$'
-        pattern_dd_de_month_de_yyyy = r'^(\d{2})\s*de\s*(\w+)+\s*de\s*(\d{4})$'
+        if regex_pattern == cls.RE_PATTERN__DD_AL_DD_MONTH_DE_YYYY:
+            start_day = match_pattern.group(1)
+            start_month = match_pattern.group(3)
+            end_day = match_pattern.group(2)
+            end_month = start_month
+            year = match_pattern.group(4)
 
-        match_dd_al_dd_month_de_yyyy = re.match(pattern_dd_al_dd_month_de_yyyy, date_string.lower())
-        match_dd_de_month_de_yyyy = re.match(pattern_dd_de_month_de_yyyy, date_string.lower())
+        elif (
+            regex_pattern == cls.RE_PATTERN__DD_DE_MONTH_DE_YYYY
+            or regex_pattern == cls.RE_PATTERN__DD_x_MONTH_x_YYYY
+        ):
+            start_day = match_pattern.group(1)
+            start_month = match_pattern.group(2)
+            year = match_pattern.group(3)
 
-        if match_dd_al_dd_month_de_yyyy:
-            day = match_dd_al_dd_month_de_yyyy.group(1)
-            month = match_dd_al_dd_month_de_yyyy.group(3)
-            year = match_dd_al_dd_month_de_yyyy.group(4)
-        elif match_dd_de_month_de_yyyy:
-            day = match_dd_de_month_de_yyyy.group(1)
-            month = match_dd_de_month_de_yyyy.group(2)
-            year = match_dd_de_month_de_yyyy.group(3)
-        else:
-            # Split the input string
-            day, month, year = date_string.split(split_by)
+        elif regex_pattern == cls.RE_PATTERN__DD_DE_MONTH_AL_DD_DE_MONTH_DE_YYYY:
+            start_day = match_pattern.group(1)
+            start_month = match_pattern.group(2)
+            end_day = match_pattern.group(3)
+            end_month = match_pattern.group(4)
+            year = match_pattern.group(5)
+
+        elif (
+            regex_pattern == cls.RE_PATTERN__DD_DE_MONTH_DEL_YYYY_AL_DD_DE_MONTH_DEL_YYYY
+            or regex_pattern == cls.RE_PATTERN__DD_x_MONTH_x_YYYY_AL_DD_x_MONTH_x_YYYY
+        ):
+            start_day = match_pattern.group(1)
+            start_month = match_pattern.group(2)
+            end_day = match_pattern.group(4)
+            end_month = match_pattern.group(5)
+            year = match_pattern.group(6)
+
+        if start_month in cls._SHORT_MONTH_MAPPING_ESP_TO_ENG:
+            start_month = cls._SHORT_MONTH_MAPPING_ESP_TO_ENG[start_month]
+        if end_month in cls._SHORT_MONTH_MAPPING_ESP_TO_ENG:
+            end_month = cls._SHORT_MONTH_MAPPING_ESP_TO_ENG[end_month]
+
+        return {
+            "start_day": start_day,
+            "start_month": start_month,
+            "end_day": end_day,
+            "end_month": end_month,
+            "year": year,
+        }
+
+    @classmethod
+    def format_date_string_into_datetime(cls, date_string):
+
+        date_data = cls.get_datetime_data_from_date_string(date_string)
+        day = date_data.get("start_day")
+        month = date_data.get("start_month")
+        year = date_data.get("year")
 
         # Convert month name to English
-        month = cls._MONTH_MAPPING[month]
+        month = cls._MONTH_MAPPING_ESP_TO_ENG[month]
 
         # Create datetime object
         date_string = f"{day} {month} {year}"

@@ -1,4 +1,3 @@
-import re
 from banks.base_classes import BankAccountStatePDF
 
 
@@ -17,8 +16,8 @@ class CitiBanamexDebitPDF(BankAccountStatePDF):
     PATTERN_NUMERO_DE_CLIENTE = r"Número de cliente\n+(.*)"
     PATTERN_NUMERO_DE_TARJETA = None
 
-    def __init__(self, pdf_file_path):
-        super().__init__(pdf_file_path)
+    def __init__(self, pdf_file_path: str, raw_file_contents: str = None):
+        super().__init__(pdf_file_path, raw_file_contents)
         self.is_debit = True
 
 
@@ -38,6 +37,6 @@ class CitiBanamexCreditCostcoPDF(BankAccountStatePDF):
     PATTERN_NUMERO_DE_CLIENTE = r"Número de cliente\n+(.*)"
     PATTERN_NUMERO_DE_TARJETA = r"NÚMERO DE TARJETA\n+(.*)"
 
-    def __init__(self, pdf_file_path):
-        super().__init__(pdf_file_path)
+    def __init__(self, pdf_file_path: str, raw_file_contents: str = None):
+        super().__init__(pdf_file_path, raw_file_contents)
         self.is_credit = True

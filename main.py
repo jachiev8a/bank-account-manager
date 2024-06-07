@@ -4,8 +4,8 @@ from pdf_utils.parsers import parse_pdf_with_pdfminer, parse_pdf_with_pymupdf
 
 
 DIR_LIST_WITH_TO_LOOK_FOR_PDFS = [
-    # "~/Downloads",
-    "~/Downloads/PDF_TESTS",
+    "~/Downloads",
+    #"~/Downloads/PDF_TESTS",
 ]
 
 ACCOUNT_STATE_OBJECTS = []
@@ -16,6 +16,9 @@ bank_account_state_manager.load_directories_to_search_for_pdfs(
 )
 
 bank_account_state_manager.auto_rename_bank_accounts_loaded()
-bank_account_state_manager.list_bank_accounts_loaded()
+bank_account_state_manager.list_bank_accounts_loaded(
+    add_details=True,
+    order_by="date",
+)
 
 a = 0

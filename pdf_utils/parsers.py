@@ -1,6 +1,8 @@
+from pdf2image import convert_from_path
 from pdfminer.high_level import extract_text
 import fitz  # PyMuPDF
 import os
+import pytesseract
 
 
 def get_pdf_file_contents(pdf_filepath: str):
@@ -27,11 +29,21 @@ def parse_pdf_with_pymupdf(pdf_path):
     return text
 
 
-def get_pdf_file_size(pdf_file_path):
+def parse_pdf_with_pdf2image(pdf_path):
+    # Convert PDF to images
+    print("Running OCR parsing process...")
+    images = convert_from_path(pdf_path)
+    text = ""
+    for image in images:
+        text += pytesseract.image_to_string(image)
+
+    return text
+
+
+def get_pdf_file_size(pdf_file_path) -> int:
     try:
         # Get the size of the file in bytes
         size_bytes = os.path.getsize(pdf_file_path)
         return size_bytes
     except FileNotFoundError:
         print(f"File not found: {pdf_file_path}")
-        return None
