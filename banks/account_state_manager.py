@@ -1,36 +1,44 @@
 import os
+import shutil
+from datetime import datetime
+
 from banks.base_classes import BankAccountStatePDF
 from banks.citibanamex import CitiBanamexDebitPDF, CitiBanamexCreditCostcoPDF
+from banks.inbursa import InbursaDebitPDF
 from banks.santander import SantanderDebitPDF, SantanderDebitImagePDF
-from common.utils import get_project_tmp_dir, load_json_file, read_txt_file, write_json_file
 from pdf_utils.base import get_pdf_files
-from pdf_utils.parsers import parse_pdf_with_pymupdf, parse_pdf_with_pdf2image
+from pdf_utils.parsers import PdfParseManager
+from settings import get_tmp_dir, get_bank_account_after_date_config
 
 
 class PDFBankAccountStateManager:
+    """
+    Class to manage the bank accounts loaded from PDF files
+    """
 
     _SEPARATOR = "="*80
     _SEPARATOR_SMALL = "-"*80
 
-    PDF_IMAGE_MAPPING_FILE_NAME = f"{get_project_tmp_dir()}/__PDF_IMAGE_MAPPING_TABLE.json"
-    PDF_IMAGE_MAPPING_TXT_FILES_DIR_PATH = f"{get_project_tmp_dir()}/PDF_TXT_FILES"
-    PDF_IMAGE_MAPPING_DATA = None
+    OUTPUT_DIR = f"{get_tmp_dir()}/_PDFBankAccountStateManager"
 
     def __init__(self):
+        """
+        Constructor for the PDFBankAccountStateManager class.
+        """
         self.bank_accounts_loaded = {}  # type: dict[str, BankAccountStatePDF]
+        self.bank_accounts_to_ignore = []  # type: list[BankAccountStatePDF]
+        self.after_date_config = get_bank_account_after_date_config()  # type: datetime.date
+        self.pdf_parser_manager = PdfParseManager()
 
-    def _load_bank_account_state_object(self, bank_account_state_object: BankAccountStatePDF):
-        unique_file_id = bank_account_state_object.get_unique_file_id()
-        self.bank_accounts_loaded[unique_file_id] = bank_account_state_object
-
-    @classmethod
-    def load_pdf_image_mapping_table(cls):
-        if not os.path.exists(cls.PDF_IMAGE_MAPPING_FILE_NAME):
-            with open(cls.PDF_IMAGE_MAPPING_FILE_NAME, "w") as f_obj:
-                f_obj.write("{}")
-        # print(f"Loading PDF Image Mapping Table ({pdf_image_mapping_file})...")
-        cls.PDF_IMAGE_MAPPING_DATA = load_json_file(cls.PDF_IMAGE_MAPPING_FILE_NAME)
-        os.makedirs(cls.PDF_IMAGE_MAPPING_TXT_FILES_DIR_PATH, exist_ok=True)
+    def _load_bank_account_state_object(
+        self,
+        bank_account_state_object: BankAccountStatePDF
+    ):
+        """
+        Load the BankAccountStatePDF object into the bank_accounts_loaded dictionary.
+        """
+        hash_file_value = bank_account_state_object.get_unique_hash_file_value()
+        self.bank_accounts_loaded[hash_file_value] = bank_account_state_object
 
     def get_bank_accounts_loaded_ordered(
         self,
@@ -50,21 +58,39 @@ class PDFBankAccountStateManager:
         else:
             return self.bank_accounts_loaded.values()
 
+    def get_bank_accounts_loaded_by_bank_name(self) -> dict[str, list[BankAccountStatePDF]]:
+        """
+        Get the bank accounts loaded by bank name.
+        """
+        bank_accounts_by_bank = {}
+        for bank_account_obj_id, bank_account_obj in self.bank_accounts_loaded.items():
+            bank_name = bank_account_obj.get_bank_name()
+            if bank_name not in bank_accounts_by_bank.keys():
+                bank_accounts_by_bank[bank_name] = []
+            bank_accounts_by_bank[bank_name].append(bank_account_obj)
+        return bank_accounts_by_bank
+
     def bank_account_state_object_already_loaded(self, bank_account_state_object: BankAccountStatePDF):
-        unique_file_id = bank_account_state_object.get_unique_file_id()
-        if unique_file_id in self.bank_accounts_loaded.keys():
+        hash_file_value = bank_account_state_object.get_unique_hash_file_value()
+        if hash_file_value in self.bank_accounts_loaded.keys():
             return True
         return False
 
-    def load_directories_to_search_for_pdfs(self, directory_list: list = None):
+    def load_directories_to_search_for_pdfs(
+        self,
+        directory_list: list = None
+    ):
+        """
+        Load the PDF files found in the directories specified in the 'directory_list' parameter.
+        """
         if not directory_list:
             directory_list = []
 
         pdf_files_abspath_list = []
 
         for directory in directory_list:
-            files_found_in_dir = get_pdf_files(directory)
-            pdf_files_abspath_list.extend(files_found_in_dir)
+            pdf_files_found_in_dir = get_pdf_files(directory)
+            pdf_files_abspath_list.extend(pdf_files_found_in_dir)
 
         for pdf_file_abspath in pdf_files_abspath_list:
             print(f"Processing PDF file: '{pdf_file_abspath}'")
@@ -81,23 +107,29 @@ class PDFBankAccountStateManager:
         )
         if bank_account_state_obj:
             if self.bank_account_state_object_already_loaded(bank_account_state_obj):
+                bank_account_state_obj_already_loaded = self.bank_accounts_loaded.get(
+                    bank_account_state_obj.get_unique_hash_file_value()
+                )
                 print(
                     "[!] WARNING. PDF file already loaded! | "
                     "Files seems to be the same: "
-                    f"[1]: '{pdf_file_path}' | "
-                    f"[2]: '{bank_account_state_obj.get_pdf_file_path()}' | "
+                    f"[LOADED]: '{bank_account_state_obj_already_loaded.get_pdf_file_path()}' | "
+                    f"[IGNORED]: '{bank_account_state_obj.get_pdf_file_path()}' | "
                 )
+                self.bank_accounts_to_ignore.append(bank_account_state_obj)
             else:
-                self._load_bank_account_state_object(bank_account_state_obj)
+                bank_account_period_date = bank_account_state_obj.get_periodo_inicio()
+                bank_account_period_date = datetime.strptime(bank_account_period_date, "%Y-%m-%d").date()
+                if bank_account_period_date >= self.after_date_config:
+                    self._load_bank_account_state_object(bank_account_state_obj)
+                else:
+                    print(
+                        f" > Bank Account PDF file is older than the specified date: '{pdf_file_path}'"
+                    )
 
     def auto_rename_bank_accounts_loaded(self):
         for bank_account_obj_id, bank_account_obj in self.bank_accounts_loaded.items():
             new_file_name = bank_account_obj.auto_rename_file_name()
-            if bank_account_obj.is_image_pdf and new_file_name:
-                self.set_pdf_file_contents_to_mapping_table(
-                    new_file_name,
-                    bank_account_obj.raw_pdf_file_contents,
-                )
 
     def list_bank_accounts_loaded(self, add_details: bool = False, order_by: str = None):
         print(self._SEPARATOR)
@@ -131,59 +163,56 @@ class PDFBankAccountStateManager:
 
         print(self._SEPARATOR)
 
-    @classmethod
-    def set_pdf_file_contents_to_mapping_table(cls, original_pdf_image_file_path: str, file_contents: str):
-        cls.load_pdf_image_mapping_table()
-        original_pdf_image_basename = original_pdf_image_file_path.split("/")[-1].split(".")[0]
-        pdf_file_mapped_as_txt = (
-            f"{cls.PDF_IMAGE_MAPPING_TXT_FILES_DIR_PATH}/{original_pdf_image_basename}.txt"
-        )
-        with open(pdf_file_mapped_as_txt, "w") as f_obj:
-            f_obj.write(file_contents)
-        cls.PDF_IMAGE_MAPPING_DATA[original_pdf_image_file_path] = pdf_file_mapped_as_txt
-        write_json_file(
-            cls.PDF_IMAGE_MAPPING_FILE_NAME,
-            cls.PDF_IMAGE_MAPPING_DATA
-        )
+        for bank_account_obj in self.bank_accounts_to_ignore:
+            print(f" > File: \"{bank_account_obj.get_pdf_file_path()}\" was ignored.")
 
-    @classmethod
-    def get_pdf_file_contents_from_mapping_table(cls, pdf_file_path: str):
-        cls.load_pdf_image_mapping_table()
-        if pdf_file_path in cls.PDF_IMAGE_MAPPING_DATA.keys():
-            print(f" > PDF file contents loaded from mapping table: '{pdf_file_path}'")
-            pdf_file_mapped_as_txt = cls.PDF_IMAGE_MAPPING_DATA[pdf_file_path]
-            file_contents = read_txt_file(pdf_file_mapped_as_txt)
-            return file_contents
+    def build_output_project(self, start_clean: bool = True):
+        """
+        Build the project with the bank accounts loaded.
+        """
+        if start_clean:
+            if os.path.exists(self.OUTPUT_DIR):
+                shutil.rmtree(self.OUTPUT_DIR)
+
+        bank_accounts_by_bank = self.get_bank_accounts_loaded_by_bank_name()
+        for bank_name, bank_accounts_list in bank_accounts_by_bank.items():
+
+            output_bank_dir = f"{self.OUTPUT_DIR}/{bank_name}"
+            os.makedirs(output_bank_dir, exist_ok=True)
+
+            for bank_account_obj in bank_accounts_list:
+                if bank_account_obj.is_debit_account():
+                    output_file_path = f"{output_bank_dir}/{bank_account_obj.pdf_file_basename}"
+                    if not os.path.exists(output_file_path):
+                        shutil.copyfile(bank_account_obj.get_pdf_file_path(), output_file_path)
+
 
     @classmethod
     def get_bank_account_state_object_from_pdf_file(cls, pdf_file_path: str):
+        """
+        Get the BankAccountStatePDF object from the PDF file.
+        """
         instance = None
-        is_image_pdf = False
-        file_contents = cls.get_pdf_file_contents_from_mapping_table(pdf_file_path)
-        if not file_contents:
-            file_contents = parse_pdf_with_pymupdf(pdf_file_path)
-            if not file_contents:
-                print(
-                    f"[!] PDF file contents are empty. "
-                    f"Trying OCR to extract text: '{pdf_file_path}'"
-                )
-                file_contents = parse_pdf_with_pdf2image(pdf_file_path)
-                is_image_pdf = True
-                cls.set_pdf_file_contents_to_mapping_table(pdf_file_path, file_contents)
-        else:
-            is_image_pdf = True
+        pdf_parse_manager = PdfParseManager()
+        pdf_file_contents, is_pdf_image_type = (
+            pdf_parse_manager.parse_pdf_file(pdf_file_path)
+        )
 
-        if CitiBanamexCreditCostcoPDF.keywords_found_in_pdf_contents(file_contents):
-            instance = CitiBanamexCreditCostcoPDF(pdf_file_path, file_contents)
+        # try:
+        if CitiBanamexCreditCostcoPDF.keywords_found_in_pdf_contents(pdf_file_contents):
+            instance = CitiBanamexCreditCostcoPDF(pdf_file_path, pdf_file_contents)
 
-        elif CitiBanamexDebitPDF.keywords_found_in_pdf_contents(file_contents):
-            instance = CitiBanamexDebitPDF(pdf_file_path, file_contents)
+        elif CitiBanamexDebitPDF.keywords_found_in_pdf_contents(pdf_file_contents):
+            instance = CitiBanamexDebitPDF(pdf_file_path, pdf_file_contents)
 
-        elif is_image_pdf and SantanderDebitImagePDF.keywords_found_in_pdf_contents(file_contents):
-            instance = SantanderDebitImagePDF(pdf_file_path, file_contents)
+        elif is_pdf_image_type and SantanderDebitImagePDF.keywords_found_in_pdf_contents(pdf_file_contents):
+            instance = SantanderDebitImagePDF(pdf_file_path, pdf_file_contents)
 
-        elif SantanderDebitPDF.keywords_found_in_pdf_contents(file_contents):
-            instance = SantanderDebitPDF(pdf_file_path, file_contents)
+        elif SantanderDebitPDF.keywords_found_in_pdf_contents(pdf_file_contents):
+            instance = SantanderDebitPDF(pdf_file_path, pdf_file_contents)
+
+        elif InbursaDebitPDF.keywords_found_in_pdf_contents(pdf_file_contents):
+            instance = InbursaDebitPDF(pdf_file_path, pdf_file_contents)
 
         if instance:
             print(f" > Bank State account successfully loaded: '{pdf_file_path}'")

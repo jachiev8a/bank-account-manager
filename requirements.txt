@@ -2,3 +2,4 @@ pymupdf
 pdfminer.six
 pdf2image
 pytesseract
+pyyaml

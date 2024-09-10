@@ -1,5 +1,15 @@
+import hashlib
 import os
 import json
+
+
+def singleton(cls):
+    instances = {}
+    def wrapper(*args, **kwargs):
+        if cls not in instances:
+          instances[cls] = cls(*args, **kwargs)
+        return instances[cls]
+    return wrapper
 
 
 def convert_bytes_to_human_readable(bytes_number):
@@ -35,3 +45,17 @@ def read_txt_file(file_path):
     with open(file_path, "r") as file_obj:
         file_contents = file_obj.read()
     return file_contents
+
+
+def get_hash_from_string(string, algorithm='sha256'):
+    return hashlib.md5(string.encode()).hexdigest()
+
+
+def get_file_hash(file_path, algorithm='sha256'):
+    """
+    Compute the hash of a file using the specified algorithm.
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    return hashlib.md5(open(file_path, 'rb').read()).hexdigest()

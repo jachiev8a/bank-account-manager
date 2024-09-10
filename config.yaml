@@ -1,0 +1,8 @@
+
+directory_list_to_look_for_pdfs:
+  - ~/Downloads
+  #- ~/Downloads/TESTS
+
+get_bank_accounts_after_date: 2024-01-01
+
+log_level: INFO
