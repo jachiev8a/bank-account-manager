@@ -42,6 +42,29 @@ def get_bank_account_after_date_config() -> datetime.date:
         return datetime.date(2000, 1, 1)
 
 
+def get_bank_account_types_enabled_by_configuration() -> list:
+    config_data = get_configuration_data()
+    return config_data.get("bank_account_types_enabled", [])
+
+
+def is_debit_account_type_enabled() -> bool:
+    accounts_to_look_for = get_bank_account_types_enabled_by_configuration()
+    is_enabled = (
+        "debit" in accounts_to_look_for
+        or "debito" in accounts_to_look_for
+    )
+    return is_enabled
+
+
+def is_credit_account_type_enabled() -> bool:
+    accounts_to_look_for = get_bank_account_types_enabled_by_configuration()
+    is_enabled = (
+        "credit" in accounts_to_look_for
+        or "credito" in accounts_to_look_for
+    )
+    return is_enabled
+
+
 def get_tmp_dir():
     tmp_dir_path = f"{get_project_root_dir()}/{TMP_DIR_NAME}"
     os.makedirs(tmp_dir_path, exist_ok=True)

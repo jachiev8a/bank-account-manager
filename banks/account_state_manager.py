@@ -3,12 +3,14 @@ import shutil
 from datetime import datetime
 
 from banks.base_classes import BankAccountStatePDF
+from banks.bbva import BbvaDebitPDF, BbvaCreditPDF
 from banks.citibanamex import CitiBanamexDebitPDF, CitiBanamexCreditCostcoPDF
 from banks.inbursa import InbursaDebitPDF
 from banks.santander import SantanderDebitPDF, SantanderDebitImagePDF
 from pdf_utils.base import get_pdf_files
 from pdf_utils.parsers import PdfParseManager
-from settings import get_tmp_dir, get_bank_account_after_date_config
+from settings import get_tmp_dir, get_bank_account_after_date_config, is_debit_account_type_enabled, \
+    is_credit_account_type_enabled
 
 
 class PDFBankAccountStateManager:
@@ -166,6 +168,14 @@ class PDFBankAccountStateManager:
         for bank_account_obj in self.bank_accounts_to_ignore:
             print(f" > File: \"{bank_account_obj.get_pdf_file_path()}\" was ignored.")
 
+    @staticmethod
+    def is_bank_account_type_enabled(bank_account_obj: BankAccountStatePDF):
+        if bank_account_obj.is_debit_account() and is_debit_account_type_enabled():
+            return True
+        elif bank_account_obj.is_credit_account() and is_credit_account_type_enabled():
+            return True
+        return False
+
     def build_output_project(self, start_clean: bool = True):
         """
         Build the project with the bank accounts loaded.
@@ -181,10 +191,20 @@ class PDFBankAccountStateManager:
             os.makedirs(output_bank_dir, exist_ok=True)
 
             for bank_account_obj in bank_accounts_list:
-                if bank_account_obj.is_debit_account():
-                    output_file_path = f"{output_bank_dir}/{bank_account_obj.pdf_file_basename}"
+                if self.is_bank_account_type_enabled(bank_account_obj):
+                    bank_account_type = bank_account_obj.get_account_type_name()
+                    if not os.path.exists(f"{output_bank_dir}/{bank_account_type}"):
+                        os.makedirs(f"{output_bank_dir}/{bank_account_type}")
+                    output_file_path = (
+                        f"{output_bank_dir}/"
+                        f"{bank_account_type}/"
+                        f"{bank_account_obj.pdf_file_basename}"
+                    )
                     if not os.path.exists(output_file_path):
-                        shutil.copyfile(bank_account_obj.get_pdf_file_path(), output_file_path)
+                        shutil.copyfile(
+                            bank_account_obj.get_pdf_file_path(),
+                            output_file_path
+                        )
 
 
     @classmethod
@@ -198,7 +218,6 @@ class PDFBankAccountStateManager:
             pdf_parse_manager.parse_pdf_file(pdf_file_path)
         )
 
-        # try:
         if CitiBanamexCreditCostcoPDF.keywords_found_in_pdf_contents(pdf_file_contents):
             instance = CitiBanamexCreditCostcoPDF(pdf_file_path, pdf_file_contents)
 
@@ -210,6 +229,12 @@ class PDFBankAccountStateManager:
 
         elif SantanderDebitPDF.keywords_found_in_pdf_contents(pdf_file_contents):
             instance = SantanderDebitPDF(pdf_file_path, pdf_file_contents)
+
+        elif BbvaDebitPDF.keywords_found_in_pdf_contents(pdf_file_contents):
+            instance = BbvaDebitPDF(pdf_file_path, pdf_file_contents)
+
+        elif BbvaCreditPDF.keywords_found_in_pdf_contents(pdf_file_contents):
+            instance = BbvaCreditPDF(pdf_file_path, pdf_file_contents)
 
         elif InbursaDebitPDF.keywords_found_in_pdf_contents(pdf_file_contents):
             instance = InbursaDebitPDF(pdf_file_path, pdf_file_contents)

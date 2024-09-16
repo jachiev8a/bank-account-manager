@@ -5,4 +5,24 @@ directory_list_to_look_for_pdfs:
 
 get_bank_accounts_after_date: 2024-01-01
 
+# ---------------------------------------------------------
+# The following are the bank account types that the program
+# will look for in the PDFs. Also, these accounts will
+# be generated in the final output directory.
+#
+# Available options are:
+#   <credit> or <credito>, <debit> or <debito>
+#
+# NOTE:
+# You may remove or comment out any of the following
+# lines to exclude them from the search.
+# ---------------------------------------------------------
+bank_account_types_enabled:
+  - credit
+  - debit
+
+# ---------------------------------------------------------
+# This is the log level that the program will use.
+# (for debugging/development purposes only)
+# ---------------------------------------------------------
 log_level: INFO

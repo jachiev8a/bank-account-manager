@@ -18,12 +18,17 @@ class BankAccountStatePDF(ABC):
     BANK_SHORT_NAME = None
     PDF_KEYWORDS = []
 
+    ALL_KEYWORDS_SHOULD_BE_IN_PDF = False
+
     PATTERN_FECHA_DE_CORTE = None
     PATTERN_PERIODO = None
 
     PATTERN_NUMERO_DE_CUENTA = None
     PATTERN_NUMERO_DE_CLIENTE = None
     PATTERN_NUMERO_DE_TARJETA = None
+
+    # limit
+    MAX_LIMIT_TO_SEARCH_FOR_KEYWORDS = None
 
     _SHORT_MONTH_MAPPING_ESP_TO_ENG = {
         'ene': 'enero',
@@ -100,6 +105,14 @@ class BankAccountStatePDF(ABC):
     RE_PATTERN__DD_MMM_YYYY_AL_DD_MMM_YYYY = (
         r'^(\d{1,2})\s*(\w{3})\s*(\d{4})\s*al\s*(\d{1,2})\s*(\w{3})\s*(\d{4})$'
     )
+    #   > '10/01/2024'
+    RE_PATTERN__DD_slash_MM_slash_YYYY = (
+        r'^\s?(\d{1,2})\/(\d{1,2})\/(\d{4})$'
+    )
+    #   > '11/12/2023 al 10/01/2024'
+    RE_PATTERN__DD_slash_MM_slash_YYYY_AL_DD_slash_MM_slash_YYYY = (
+        r'^\s?(\d{1,2})\/(\d{1,2})\/(\d{4})\s*al\s*(\d{1,2})\/(\d{1,2})\/(\d{4})$'
+    )
 
     def __init__(self, pdf_file_path: str, raw_file_contents: str = None, is_image_pdf: bool = False):
         self.logger = CustomLogger(
@@ -169,12 +182,7 @@ class BankAccountStatePDF(ABC):
         if not self.numero_de_cliente:
             minor_empty_fields.append("numero_de_cliente")
 
-        # post-process
-        self.month_name = self._MONTH_MAPPING_SPANISH_BY_NUMBER.get(
-            self.periodo_inicio.month
-        )
-        self.month_short_name = self.month_name[:3].upper()
-
+        # raise error if main fields are empty
         if main_empty_fields:
             error_msg = (
                 "ERROR: some important fields were empty after the parsing process... | "
@@ -189,6 +197,12 @@ class BankAccountStatePDF(ABC):
                 f"Fields: [{', '.join(minor_empty_fields)}]"
             )
             print(warning_msg)
+
+        # post-process
+        self.month_name = self._MONTH_MAPPING_SPANISH_BY_NUMBER.get(
+            self.periodo_inicio.month
+        )
+        self.month_short_name = self.month_name[:3].upper()
 
     def get_pdf_file_path(self):
         return self.pdf_file_path
@@ -276,9 +290,22 @@ class BankAccountStatePDF(ABC):
 
     @classmethod
     def keywords_found_in_pdf_contents(cls, pdf_contents: str):
+        pdf_contents_as_lines = pdf_contents.split("\n")
+        if cls.MAX_LIMIT_TO_SEARCH_FOR_KEYWORDS is not None:
+            pdf_contents_as_lines = pdf_contents_as_lines[:cls.MAX_LIMIT_TO_SEARCH_FOR_KEYWORDS]
+
+        pdf_contents_as_text = "\n".join(pdf_contents_as_lines)
+
+        total_keywords_found = 0
+
         for keyword in cls.PDF_KEYWORDS:
-            if keyword in pdf_contents:
-                return True
+            if keyword in pdf_contents_as_text:
+                if cls.ALL_KEYWORDS_SHOULD_BE_IN_PDF:
+                    total_keywords_found += 1
+                    if total_keywords_found == len(cls.PDF_KEYWORDS):
+                        return True
+                else:
+                    return True
         return False
 
     @classmethod
@@ -332,6 +359,10 @@ class BankAccountStatePDF(ABC):
             pattern = cls.RE_PATTERN__DD_MMM_YYYY
         elif re.match(cls.RE_PATTERN__DD_MMM_YYYY_AL_DD_MMM_YYYY, date_string):
             pattern = cls.RE_PATTERN__DD_MMM_YYYY_AL_DD_MMM_YYYY
+        elif re.match(cls.RE_PATTERN__DD_slash_MM_slash_YYYY, date_string):
+            pattern = cls.RE_PATTERN__DD_slash_MM_slash_YYYY
+        elif re.match(cls.RE_PATTERN__DD_slash_MM_slash_YYYY_AL_DD_slash_MM_slash_YYYY, date_string):
+            pattern = cls.RE_PATTERN__DD_slash_MM_slash_YYYY_AL_DD_slash_MM_slash_YYYY
         if not pattern:
             raise RuntimeError(
                 f"RE Pattern not supported for date string value: '{date_string}'"
@@ -394,6 +425,18 @@ class BankAccountStatePDF(ABC):
             end_month = match_pattern.group(5)
             year = match_pattern.group(6)
 
+        elif regex_pattern == cls.RE_PATTERN__DD_slash_MM_slash_YYYY:
+            start_day = match_pattern.group(1)
+            start_month = match_pattern.group(2)
+            year = match_pattern.group(3)
+
+        elif regex_pattern == cls.RE_PATTERN__DD_slash_MM_slash_YYYY_AL_DD_slash_MM_slash_YYYY:
+            start_day = match_pattern.group(1)
+            start_month = match_pattern.group(2)
+            end_day = match_pattern.group(4)
+            end_month = match_pattern.group(5)
+            year = match_pattern.group(6)
+
         if start_month in cls._SHORT_MONTH_MAPPING_ESP_TO_ENG:
             start_month = cls._SHORT_MONTH_MAPPING_ESP_TO_ENG[start_month]
         if end_month in cls._SHORT_MONTH_MAPPING_ESP_TO_ENG:
@@ -414,6 +457,11 @@ class BankAccountStatePDF(ABC):
         day = date_data.get("start_day")
         month = date_data.get("start_month")
         year = date_data.get("year")
+
+        # Convert month number to month name in Spanish
+        # (to later one, convert the month name to English)
+        if month.isdigit():
+            month = cls._MONTH_MAPPING_SPANISH_BY_NUMBER.get(int(month)).lower()
 
         # Convert month name to English
         month = cls._MONTH_MAPPING_ESP_TO_ENG[month]

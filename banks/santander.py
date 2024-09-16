@@ -5,10 +5,15 @@ class SantanderBasePDF(BankAccountStatePDF):
 
     BANK_NAME = "santander"
     BANK_SHORT_NAME = "santander"
+
     PDF_KEYWORDS = [
-        "Santander",
-        "santander",
+        "SANTANDER",
+        "CHEQUES",
     ]
+
+    ALL_KEYWORDS_SHOULD_BE_IN_PDF = True
+    MAX_LIMIT_TO_SEARCH_FOR_KEYWORDS = 200
+
     PATTERN_FECHA_DE_CORTE = r"PERIODO\s+\:\s+\d{2}\s+AL\s+(.*)"
     PATTERN_PERIODO = r"PERIODO\s+\:\s+(.*)"
 
