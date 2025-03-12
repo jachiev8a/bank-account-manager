@@ -1,6 +1,7 @@
 
 directory_list_to_look_for_pdfs:
   - ~/Downloads
+  - ~/Downloads/Edos-Cuenta
   #- ~/Downloads/TESTS
 
 get_bank_accounts_after_date: 2024-01-01
@@ -20,6 +21,19 @@ get_bank_accounts_after_date: 2024-01-01
 bank_account_types_enabled:
   - credit
   - debit
+
+# ---------------------------------------------------------
+# The following are the bank names that the program will
+# look for in the PDFs. Also, these banks will be generated
+# in the final output directory.
+#
+# NOTE:
+# You may remove or comment out any of the following
+# lines to exclude them from the search.
+# ---------------------------------------------------------
+bank_names_enabled:
+  - citibanamex
+  - bbva
 
 # ---------------------------------------------------------
 # This is the log level that the program will use.

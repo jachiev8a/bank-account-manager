@@ -7,6 +7,12 @@ from pathlib import Path
 TMP_DIR_NAME = ".tmp"
 CONFIGURATION_DATA = None
 
+# constants
+DEBIT = "debit"
+DEBITO = "debito"
+CREDIT = "credit"
+CREDITO = "credito"
+
 
 def get_project_root_dir():
     """
@@ -35,7 +41,10 @@ def get_directory_list_to_look_for_pdfs() -> list:
 
 def get_bank_account_after_date_config() -> datetime.date:
     config_data = get_configuration_data()
-    after_date_value = config_data.get("get_bank_accounts_after_date", None)
+    after_date_value = config_data.get(
+        "get_bank_accounts_after_date",
+        datetime.date(2000, 1, 1),
+    )
     if after_date_value:
         return after_date_value
     else:
@@ -50,8 +59,8 @@ def get_bank_account_types_enabled_by_configuration() -> list:
 def is_debit_account_type_enabled() -> bool:
     accounts_to_look_for = get_bank_account_types_enabled_by_configuration()
     is_enabled = (
-        "debit" in accounts_to_look_for
-        or "debito" in accounts_to_look_for
+        DEBIT in accounts_to_look_for
+        or DEBITO in accounts_to_look_for
     )
     return is_enabled
 
@@ -59,8 +68,8 @@ def is_debit_account_type_enabled() -> bool:
 def is_credit_account_type_enabled() -> bool:
     accounts_to_look_for = get_bank_account_types_enabled_by_configuration()
     is_enabled = (
-        "credit" in accounts_to_look_for
-        or "credito" in accounts_to_look_for
+        CREDIT in accounts_to_look_for
+        or CREDITO in accounts_to_look_for
     )
     return is_enabled
 

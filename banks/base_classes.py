@@ -98,12 +98,14 @@ class BankAccountStatePDF(ABC):
         r'^(\d{1,2})\-(\w+)\-(\d{4})$'
     )
     #   > '15 Ago 2024'
+    #   > '15 Feb. 2024'
     RE_PATTERN__DD_MMM_YYYY = (
-        r'^(\d{1,2})\s*(\w{3})\s*(\d{4})$'
+        r'^(\d{1,2})\s*(\w{3})\.?\s*(\d{4})$'
     )
     #   > '01 Ago 2024 al 31 Ago 2024'
+    #   > '01 Feb. 2024 al 31 Feb. 2024'
     RE_PATTERN__DD_MMM_YYYY_AL_DD_MMM_YYYY = (
-        r'^(\d{1,2})\s*(\w{3})\s*(\d{4})\s*al\s*(\d{1,2})\s*(\w{3})\s*(\d{4})$'
+        r'^(\d{1,2})\s*(\w{3})\.?\s*(\d{4})\s*al\s*(\d{1,2})\s*(\w{3})\.?\s*(\d{4})$'
     )
     #   > '10/01/2024'
     RE_PATTERN__DD_slash_MM_slash_YYYY = (

@@ -1,16 +1,22 @@
 import os
 import shutil
 from datetime import datetime
+import settings
 
 from banks.base_classes import BankAccountStatePDF
 from banks.bbva import BbvaDebitPDF, BbvaCreditPDF
-from banks.citibanamex import CitiBanamexDebitPDF, CitiBanamexCreditCostcoPDF
+from banks.citibanamex import (
+    CitiBanamexDebitPDF,
+    CitiBanamexCreditCostcoPDF,
+    CitiBanamexCreditCostco2025FormatPDF
+)
 from banks.inbursa import InbursaDebitPDF
-from banks.santander import SantanderDebitPDF, SantanderDebitImagePDF
+from banks.santander import (
+    SantanderDebitPDF,
+    SantanderDebitImagePDF
+)
 from pdf_utils.base import get_pdf_files
 from pdf_utils.parsers import PdfParseManager
-from settings import get_tmp_dir, get_bank_account_after_date_config, is_debit_account_type_enabled, \
-    is_credit_account_type_enabled
 
 
 class PDFBankAccountStateManager:
@@ -21,7 +27,7 @@ class PDFBankAccountStateManager:
     _SEPARATOR = "="*80
     _SEPARATOR_SMALL = "-"*80
 
-    OUTPUT_DIR = f"{get_tmp_dir()}/_PDFBankAccountStateManager"
+    OUTPUT_DIR = f"{settings.get_tmp_dir()}/_PDFBankAccountStateManager"
 
     def __init__(self):
         """
@@ -29,7 +35,9 @@ class PDFBankAccountStateManager:
         """
         self.bank_accounts_loaded = {}  # type: dict[str, BankAccountStatePDF]
         self.bank_accounts_to_ignore = []  # type: list[BankAccountStatePDF]
-        self.after_date_config = get_bank_account_after_date_config()  # type: datetime.date
+        self.after_date_config = (
+            settings.get_bank_account_after_date_config()  # type: datetime.date
+        )
         self.pdf_parser_manager = PdfParseManager()
 
     def _load_bank_account_state_object(
@@ -166,23 +174,32 @@ class PDFBankAccountStateManager:
         print(self._SEPARATOR)
 
         for bank_account_obj in self.bank_accounts_to_ignore:
-            print(f" > File: \"{bank_account_obj.get_pdf_file_path()}\" was ignored.")
+            print(
+                f" > File: \"{bank_account_obj.get_pdf_file_path()}\" "
+                f"was ignored because it was already loaded."
+            )
 
     @staticmethod
-    def is_bank_account_type_enabled(bank_account_obj: BankAccountStatePDF):
-        if bank_account_obj.is_debit_account() and is_debit_account_type_enabled():
-            return True
-        elif bank_account_obj.is_credit_account() and is_credit_account_type_enabled():
-            return True
-        return False
+    def is_bank_account_type_enabled(
+        bank_account_obj: BankAccountStatePDF
+    ) -> bool:
+        is_bank_account_type_enabled = (
+            (
+                settings.is_debit_account_type_enabled()
+                and bank_account_obj.is_debit_account()
+            ) or (
+                settings.is_credit_account_type_enabled()
+                and bank_account_obj.is_credit_account()
+            )
+        )
+        return is_bank_account_type_enabled
 
     def build_output_project(self, start_clean: bool = True):
         """
         Build the project with the bank accounts loaded.
         """
-        if start_clean:
-            if os.path.exists(self.OUTPUT_DIR):
-                shutil.rmtree(self.OUTPUT_DIR)
+        if start_clean and os.path.exists(self.OUTPUT_DIR):
+            shutil.rmtree(self.OUTPUT_DIR)
 
         bank_accounts_by_bank = self.get_bank_accounts_loaded_by_bank_name()
         for bank_name, bank_accounts_list in bank_accounts_by_bank.items():
@@ -218,7 +235,10 @@ class PDFBankAccountStateManager:
             pdf_parse_manager.parse_pdf_file(pdf_file_path)
         )
 
-        if CitiBanamexCreditCostcoPDF.keywords_found_in_pdf_contents(pdf_file_contents):
+        if CitiBanamexCreditCostco2025FormatPDF.keywords_found_in_pdf_contents(pdf_file_contents):
+            instance = CitiBanamexCreditCostco2025FormatPDF(pdf_file_path, pdf_file_contents)
+
+        elif CitiBanamexCreditCostcoPDF.keywords_found_in_pdf_contents(pdf_file_contents):
             instance = CitiBanamexCreditCostcoPDF(pdf_file_path, pdf_file_contents)
 
         elif CitiBanamexDebitPDF.keywords_found_in_pdf_contents(pdf_file_contents):
