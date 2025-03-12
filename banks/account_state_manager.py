@@ -33,10 +33,10 @@ class PDFBankAccountStateManager:
         """
         Constructor for the PDFBankAccountStateManager class.
         """
-        self.bank_accounts_loaded = {}  # type: dict[str, BankAccountStatePDF]
-        self.bank_accounts_to_ignore = []  # type: list[BankAccountStatePDF]
-        self.after_date_config = (
-            settings.get_bank_account_after_date_config()  # type: datetime.date
+        self.bank_accounts_loaded: dict[str, BankAccountStatePDF] = {}
+        self.bank_accounts_to_ignore: list[BankAccountStatePDF] = []
+        self.after_date_config: datetime.date = (
+            settings.get_bank_account_after_date_config()
         )
         self.pdf_parser_manager = PdfParseManager()
 

@@ -135,17 +135,17 @@ class BankAccountStatePDF(ABC):
 
         self.raw_data = {}
 
-        self.fecha_de_corte = None  # type: Union[datetime, None]
-        self.periodo_inicio = None  # type: Union[datetime, None]
-        self.periodo_termino = None  # type: Union[datetime, None]
-        self.numero_de_cuenta = None  # type: Union[str, None]
-        self.numero_de_tarjeta = None  # type: Union[str, None]
-        self.numero_de_cliente = None  # type: Union[str, None]
+        self.fecha_de_corte: Union[datetime, None] = None
+        self.periodo_inicio: Union[datetime, None] = None
+        self.periodo_termino: Union[datetime, None] = None
+        self.numero_de_cuenta: Union[str, None] = None
+        self.numero_de_tarjeta: Union[str, None] = None
+        self.numero_de_cliente: Union[str, None] = None
 
         self.is_debit = False
         self.is_credit = False
-        self.month_name = None  # type: Union[str, None]
-        self.month_short_name = None  # type: Union[str, None]
+        self.month_name: Union[str, None] = None
+        self.month_short_name: Union[str, None] = None
 
         self.file_size_in_bytes = get_pdf_file_size(pdf_file_path)
         self.file_size_human_readable = convert_bytes_to_human_readable(
