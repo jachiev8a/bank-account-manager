@@ -1,4 +1,4 @@
-from banks.base_classes import BankAccountStatePDF
+from src.banks.base_classes import BankAccountStatePDF
 
 
 class CitiBanamexDebitPDF(BankAccountStatePDF):

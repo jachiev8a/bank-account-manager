@@ -1,5 +1,5 @@
 import settings
-from banks.account_state_manager import PDFBankAccountStateManager
+from src.account_state_manager import PDFBankAccountStateManager
 
 DIR_LIST_TO_LOOK_FOR_PDFS = (
     settings.get_directory_list_to_look_for_pdfs()

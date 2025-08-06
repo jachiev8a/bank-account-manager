@@ -6,13 +6,19 @@ from typing import Union
 
 import settings
 from common.logging import CustomLogger
-from common.utils import convert_bytes_to_human_readable, get_file_hash, get_hash_from_string
-from pdf_utils.parsers import parse_pdf_with_pymupdf, get_pdf_file_size
+from common.utils import (
+    convert_bytes_to_human_readable,
+    get_hash_from_string
+)
+from pdf_utils.parsers import (
+    parse_pdf_with_pymupdf,
+    get_pdf_file_size
+)
 
 
 class BankAccountStatePDF(ABC):
 
-    _SEPARATOR = f"-"*70
+    _SEPARATOR = "-"*70
 
     BANK_NAME = None
     BANK_SHORT_NAME = None
@@ -286,8 +292,10 @@ class BankAccountStatePDF(ABC):
                 self.pdf_file_path = new_file_name
                 return new_file_name
         elif self.pdf_file_path != new_file_name:
+            a = 0
             print(
-                f"[!] Not possible to rename the file '{self.pdf_file_path}' -> '{new_file_name}'"
+                "[!] Not possible to rename the file: "
+                f"'{self.pdf_file_path}' -> '{new_file_name}'"
             )
 
     @classmethod

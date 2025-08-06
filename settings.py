@@ -51,6 +51,18 @@ def get_bank_account_after_date_config() -> datetime.date:
         return datetime.date(2000, 1, 1)
 
 
+def get_bank_account_before_date_config() -> datetime.date:
+    config_data = get_configuration_data()
+    before_date_value = config_data.get(
+        "get_bank_accounts_before_date",
+        datetime.date(2100, 1, 1),
+    )
+    if before_date_value:
+        return before_date_value
+    else:
+        return datetime.date(2100, 1, 1)
+
+
 def get_bank_account_types_enabled_by_configuration() -> list:
     config_data = get_configuration_data()
     return config_data.get("bank_account_types_enabled", [])

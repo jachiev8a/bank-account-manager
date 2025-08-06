@@ -3,15 +3,15 @@ import shutil
 from datetime import datetime
 import settings
 
-from banks.base_classes import BankAccountStatePDF
-from banks.bbva import BbvaDebitPDF, BbvaCreditPDF
-from banks.citibanamex import (
+from src.banks.base_classes import BankAccountStatePDF
+from src.banks.bbva import BbvaDebitPDF, BbvaCreditPDF
+from src.banks.citibanamex import (
     CitiBanamexDebitPDF,
     CitiBanamexCreditCostcoPDF,
     CitiBanamexCreditCostco2025FormatPDF
 )
-from banks.inbursa import InbursaDebitPDF
-from banks.santander import (
+from src.banks.inbursa import InbursaDebitPDF
+from src.banks.santander import (
     SantanderDebitPDF,
     SantanderDebitImagePDF
 )
@@ -37,6 +37,9 @@ class PDFBankAccountStateManager:
         self.bank_accounts_to_ignore: list[BankAccountStatePDF] = []
         self.after_date_config: datetime.date = (
             settings.get_bank_account_after_date_config()
+        )
+        self.before_date_config: datetime.date = (
+            settings.get_bank_account_before_date_config()
         )
         self.pdf_parser_manager = PdfParseManager()
 
@@ -130,16 +133,25 @@ class PDFBankAccountStateManager:
             else:
                 bank_account_period_date = bank_account_state_obj.get_periodo_inicio()
                 bank_account_period_date = datetime.strptime(bank_account_period_date, "%Y-%m-%d").date()
-                if bank_account_period_date >= self.after_date_config:
+
+                # Check if the bank account is in the specified date range
+                is_bank_account_in_config_date_range = (
+                    self.after_date_config <= bank_account_period_date <= self.before_date_config
+                )
+
+                if is_bank_account_in_config_date_range:
                     self._load_bank_account_state_object(bank_account_state_obj)
                 else:
                     print(
-                        f" > Bank Account PDF file is older than the specified date: '{pdf_file_path}'"
+                        f" > Bank Account PDF file '{pdf_file_path}' "
+                        "was ignored because it is out of the date range configured. "
+                        f"Period Date: '{bank_account_period_date}' "
+                        f"Date Range: [{self.after_date_config}] - [{self.before_date_config}]"
                     )
 
     def auto_rename_bank_accounts_loaded(self):
         for bank_account_obj_id, bank_account_obj in self.bank_accounts_loaded.items():
-            new_file_name = bank_account_obj.auto_rename_file_name()
+            bank_account_obj.auto_rename_file_name()
 
     def list_bank_accounts_loaded(self, add_details: bool = False, order_by: str = None):
         print(self._SEPARATOR)
