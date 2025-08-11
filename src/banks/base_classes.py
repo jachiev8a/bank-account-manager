@@ -87,6 +87,8 @@ class BankAccountStatePDF(ABC):
     RE_PATTERN__DD_AL_DD_MONTH_DE_YYYY = r'^(\d{2})\s*al\s*(\d{2})\s*de\s*(\w+)+\s*de\s*(\d{4})$'
     #   > '15 de marzo de 2024'
     RE_PATTERN__DD_DE_MONTH_DE_YYYY = r'^(\d{1,2})\s*de\s*(\w+)+\s*de\s*(\d{4})$'
+    #   > '15 de 03 de 24'
+    RE_PATTERN__DD_DE_MM_DE_YY = r'^(\d{1,2})\s*de\s*(\d{1,2})\s*de\s*(\d{2})$'
     #   > '15 de marzo al 15 de abril de 2024'
     RE_PATTERN__DD_DE_MONTH_AL_DD_DE_MONTH_DE_YYYY = (
         r'^(\d{1,2})\s*de\s*(\w+)\s*al\s*(\d{1,2})\s*de\s*(\w+)+\s*de[l]?\s*(\d{4})$'
@@ -117,9 +119,17 @@ class BankAccountStatePDF(ABC):
     RE_PATTERN__DD_slash_MM_slash_YYYY = (
         r'^\s?(\d{1,2})\/(\d{1,2})\/(\d{4})$'
     )
+    #   > '10/01/24'
+    RE_PATTERN__DD_slash_MM_slash_YY = (
+        r'^\s?(\d{1,2})\/(\d{1,2})\/(\d{2})$'
+    )
     #   > '11/12/2023 al 10/01/2024'
     RE_PATTERN__DD_slash_MM_slash_YYYY_AL_DD_slash_MM_slash_YYYY = (
         r'^\s?(\d{1,2})\/(\d{1,2})\/(\d{4})\s*al\s*(\d{1,2})\/(\d{1,2})\/(\d{4})$'
+    )
+    #   > '17/03/24 al 16/04/24'
+    RE_PATTERN__DD_slash_MM_slash_YY_AL_DD_slash_MM_slash_YY = (
+        r'^\s?(\d{1,2})\/(\d{1,2})\/(\d{2})\s*al\s*(\d{1,2})\/(\d{1,2})\/(\d{2})$'
     )
 
     def __init__(self, pdf_file_path: str, raw_file_contents: str = None, is_image_pdf: bool = False):
@@ -129,6 +139,8 @@ class BankAccountStatePDF(ABC):
         )
         self._bank_name = self.BANK_NAME
         self._bank_short_name = self.BANK_SHORT_NAME
+
+        # build file paths and file metadata
         self.pdf_file_path = pdf_file_path
         self.pdf_file_basename = str(os.path.basename(pdf_file_path))
         self.pdf_file_dir_name = str(os.path.dirname(pdf_file_path))
@@ -162,6 +174,10 @@ class BankAccountStatePDF(ABC):
             self.raw_pdf_file_contents
         )
 
+        self.is_duplicate = False
+        self.is_ignored = False
+        self.ignored_reason = ""
+
         # parse the pdf file and load the data into the instance
         self.load_bank_data_from_pdf()
         self._validate_fields()
@@ -193,8 +209,10 @@ class BankAccountStatePDF(ABC):
         # raise error if main fields are empty
         if main_empty_fields:
             error_msg = (
-                "ERROR: some important fields were empty after the parsing process... | "
-                f"Bank: '{self.get_bank_name()}' | PDF File: '{self.get_pdf_file_path()}' | "
+                f"[{self.__class__.__name__}] ERROR: some important fields "
+                f"were empty after the parsing process... | "
+                f"Bank: '{self.get_bank_name()}' | "
+                f"PDF File: '{self.get_pdf_file_path()}' | "
                 f"Fields: [{', '.join(main_empty_fields)}]"
             )
             raise RuntimeError(error_msg)
@@ -220,19 +238,13 @@ class BankAccountStatePDF(ABC):
             self.fecha_de_corte.strftime('%Y-%M-%d')
         return self.fecha_de_corte.strftime('%Y-%m-%d')
 
-    def get_periodo_inicio(self):
+    def get_periodo_inicio(self) -> str:
         return self.periodo_inicio.strftime('%Y-%m-%d')
 
-    def get_periodo_termino(self):
+    def get_periodo_termino(self) -> str:
         return self.periodo_termino.strftime('%Y-%m-%d')
 
-    def is_debit_account(self):
-        return self.is_debit
-
-    def is_credit_account(self):
-        return self.is_credit
-
-    def get_account_type_name(self):
+    def get_account_type_name(self) -> str:
         if self.is_credit_account():
             return "credito"
         elif self.is_debit_account():
@@ -247,13 +259,28 @@ class BankAccountStatePDF(ABC):
     def get_unique_hash_file_value(self) -> str:
         return self.unique_hash_file_value
 
-    def get_human_readable_name(self) -> str:
-        return (
+    def get_human_readable_name(
+        self,
+        with_extension: bool = False
+    ) -> str:
+        """Generates a human-readable name for the PDF file.
+
+        Args:
+            with_extension: If True, the file name will
+                include the '.pdf' extension.
+
+        Returns:
+            str: A human-readable name for the PDF file.
+        """
+        file_name = (
             f"{self.get_bank_short_name()}_"
             f"{self.get_account_type_name()}__"
             f"{self.get_periodo_inicio()}__"
             f"{self.month_short_name}"
         )
+        if with_extension:
+            file_name += ".pdf"
+        return file_name
 
     def get_unique_name(self) -> str:
         return (
@@ -283,20 +310,85 @@ class BankAccountStatePDF(ABC):
             f"{self._SEPARATOR}\n"
         )
 
+    def is_debit_account(self) -> bool:
+        return self.is_debit
+
+    def is_credit_account(self) -> bool:
+        return self.is_credit
+
+    def is_file_already_renamed(self) -> bool:
+        """Checks if the PDF file has already been renamed to a human-readable format.
+
+        Returns:
+            bool: True if the file is already renamed, False otherwise.
+        """
+        return (
+            self.pdf_file_basename ==
+            self.get_human_readable_name(with_extension=True)
+        )
+
+    def set_new_file_name(self, new_file_name: str):
+        self.pdf_file_path = new_file_name
+        self.pdf_file_basename = str(os.path.basename(new_file_name))
+        self.pdf_file_dir_name = str(os.path.dirname(new_file_name))
+
+    def set_as_ignored(self, reason: str = None):
+        """Marks the PDF file as ignored, meaning it has already been processed or is not relevant.
+        This method sets the `is_ignored` attribute to True and logs a message indicating that the file is ignored.
+        """
+        self.is_ignored = True
+        if reason:
+            self.ignored_reason = reason
+
+        self.logger.info(
+            f"[!] Ignored PDF Bank Account file: '{self.pdf_file_path}' | "
+            f"Reason: {self.ignored_reason if self.ignored_reason else 'N/A'}"
+        )
+
     def auto_rename_file_name(self):
-        new_file_name = f"{self.pdf_file_dir_name}/{self.get_human_readable_name()}.pdf"
-        if not os.path.exists(new_file_name):
-            if self.pdf_file_basename != new_file_name:
-                print(f"[auto-rename] '{self.pdf_file_path}' -> '{new_file_name}'")
-                os.rename(self.pdf_file_path, new_file_name)
-                self.pdf_file_path = new_file_name
-                return new_file_name
-        elif self.pdf_file_path != new_file_name:
-            a = 0
-            print(
-                "[!] Not possible to rename the file: "
-                f"'{self.pdf_file_path}' -> '{new_file_name}'"
+        """Renames the PDF file to a human-readable name based on its contents.
+
+        If the file already exists with the new name, it does not rename it.
+        If the file cannot be renamed, it prints an error message.
+
+        Returns:
+            str: The new file name if the file was renamed,
+                otherwise None.
+        """
+        # check if the file is already renamed to a human-readable format.
+        if self.is_file_already_renamed():
+            return None
+
+        new_file_name_to_set = (
+            f"{self.pdf_file_dir_name}/"
+            f"{self.get_human_readable_name()}.pdf"
+        )
+        file_exists_with_new_name = os.path.exists(new_file_name_to_set)
+
+        file_exists_with_new_name_but_is_not_this_file = (
+            file_exists_with_new_name and
+            self.pdf_file_path != new_file_name_to_set
+        )
+
+        if file_exists_with_new_name_but_is_not_this_file:
+            # file already exists with the new name, but it is not this same file,
+            # so we cannot rename it. And we should ignore this file.
+            self.set_as_ignored(
+                "File not able to be renamed because "
+                "a file with the new name already exists. "
+                f"New file: '{new_file_name_to_set}'"
             )
+            return None
+
+        if not file_exists_with_new_name:
+            # file does not exist, so we can rename it
+            print(
+                f"[auto-rename] '{self.pdf_file_path}' "
+                f"-> '{new_file_name_to_set}'"
+            )
+            os.rename(self.pdf_file_path, new_file_name_to_set)
+            self.set_new_file_name(new_file_name_to_set)
+            return new_file_name_to_set
 
     @classmethod
     def keywords_found_in_pdf_contents(cls, pdf_contents: str):
@@ -327,11 +419,12 @@ class BankAccountStatePDF(ABC):
         date_period_string = date_period_string.lower()
         date_data = cls.get_datetime_data_from_date_string(date_period_string)
 
-        start_day = date_data.get('start_day')
-        start_month = date_data.get('start_month')
-        end_day = date_data.get('end_day')
-        end_month = date_data.get('end_month')
-        year = date_data.get('year')
+        start_day = date_data.get("start_day")
+        start_month = date_data.get("start_month")
+        end_day = date_data.get("end_day")
+        end_month = date_data.get("end_month")
+        start_year = date_data.get("start_year")
+        end_year = date_data.get("end_year")
 
         # Handle year offset in case of December being the start month
         # and January being the end month.
@@ -340,8 +433,8 @@ class BankAccountStatePDF(ABC):
         if start_month.lower() == 'diciembre' and end_month.lower() == 'enero':
             year_offset = 1
 
-        start_date_str = f"{start_day} de {start_month} de {int(year)-year_offset}"
-        end_date_str = f"{end_day} de {end_month} de {year}"
+        start_date_str = f"{start_day} de {start_month} de {int(start_year)-year_offset}"
+        end_date_str = f"{end_day} de {end_month} de {end_year}"
 
         # Create datetime objects
         start_date = cls.format_date_string_into_datetime(start_date_str)
@@ -352,32 +445,52 @@ class BankAccountStatePDF(ABC):
     @classmethod
     def get_regex_pattern_from_date_string(cls, date_string):
         date_string = date_string.lower()
+        pattern_name = None
         pattern = None
         if re.match(cls.RE_PATTERN__DD_AL_DD_MONTH_DE_YYYY, date_string):
+            pattern_name = "DD_AL_DD_MONTH_DE_YYYY"
             pattern = cls.RE_PATTERN__DD_AL_DD_MONTH_DE_YYYY
         elif re.match(cls.RE_PATTERN__DD_DE_MONTH_DE_YYYY, date_string):
+            pattern_name = "DD_DE_MONTH_DE_YYYY"
             pattern = cls.RE_PATTERN__DD_DE_MONTH_DE_YYYY
+        elif re.match(cls.RE_PATTERN__DD_DE_MM_DE_YY, date_string):
+            pattern_name = "DD_DE_MM_DE_YY"
+            pattern = cls.RE_PATTERN__DD_DE_MM_DE_YY
         elif re.match(cls.RE_PATTERN__DD_DE_MONTH_AL_DD_DE_MONTH_DE_YYYY, date_string):
+            pattern_name = "DD_DE_MONTH_AL_DD_DE_MONTH_DE_YYYY"
             pattern = cls.RE_PATTERN__DD_DE_MONTH_AL_DD_DE_MONTH_DE_YYYY
         elif re.match(cls.RE_PATTERN__DD_DE_MONTH_DEL_YYYY_AL_DD_DE_MONTH_DEL_YYYY, date_string):
+            pattern_name = "DD_DE_MONTH_DEL_YYYY_AL_DD_DE_MONTH_DEL_YYYY"
             pattern = cls.RE_PATTERN__DD_DE_MONTH_DEL_YYYY_AL_DD_DE_MONTH_DEL_YYYY
         elif re.match(cls.RE_PATTERN__DD_dash_MONTH_dash_YYYY_AL_DD_dash_MONTH_dash_YYYY, date_string):
+            pattern_name = "DD_dash_MONTH_dash_YYYY_AL_DD_dash_MONTH_dash_YYYY"
             pattern = cls.RE_PATTERN__DD_dash_MONTH_dash_YYYY_AL_DD_dash_MONTH_dash_YYYY
         elif re.match(cls.RE_PATTERN__DD_dash_MONTH_dash_YYYY, date_string):
+            pattern_name = "DD_dash_MONTH_dash_YYYY"
             pattern = cls.RE_PATTERN__DD_dash_MONTH_dash_YYYY
         elif re.match(cls.RE_PATTERN__DD_MMM_YYYY, date_string):
+            pattern_name = "DD_MMM_YYYY"
             pattern = cls.RE_PATTERN__DD_MMM_YYYY
         elif re.match(cls.RE_PATTERN__DD_MMM_YYYY_AL_DD_MMM_YYYY, date_string):
+            pattern_name = "DD_MMM_YYYY_AL_DD_MMM_YYYY"
             pattern = cls.RE_PATTERN__DD_MMM_YYYY_AL_DD_MMM_YYYY
         elif re.match(cls.RE_PATTERN__DD_slash_MM_slash_YYYY, date_string):
+            pattern_name = "DD_slash_MM_slash_YYYY"
             pattern = cls.RE_PATTERN__DD_slash_MM_slash_YYYY
+        elif re.match(cls.RE_PATTERN__DD_slash_MM_slash_YY, date_string):
+            pattern_name = "DD_slash_MM_slash_YY"
+            pattern = cls.RE_PATTERN__DD_slash_MM_slash_YY
         elif re.match(cls.RE_PATTERN__DD_slash_MM_slash_YYYY_AL_DD_slash_MM_slash_YYYY, date_string):
+            pattern_name = "DD_slash_MM_slash_YYYY_AL_DD_slash_MM_slash_YYYY"
             pattern = cls.RE_PATTERN__DD_slash_MM_slash_YYYY_AL_DD_slash_MM_slash_YYYY
+        elif re.match(cls.RE_PATTERN__DD_slash_MM_slash_YY_AL_DD_slash_MM_slash_YY, date_string):
+            pattern_name = "DD_slash_MM_slash_YY_AL_DD_slash_MM_slash_YY"
+            pattern = cls.RE_PATTERN__DD_slash_MM_slash_YY_AL_DD_slash_MM_slash_YY
         if not pattern:
             raise RuntimeError(
                 f"RE Pattern not supported for date string value: '{date_string}'"
             )
-        return pattern
+        return pattern_name, pattern
 
     @classmethod
     def get_datetime_data_from_date_string(cls, date_string) -> dict:
@@ -386,9 +499,12 @@ class BankAccountStatePDF(ABC):
         start_month = None
         end_day = None
         end_month = None
-        year = None
+        start_year = None
+        end_year = None
 
-        regex_pattern = cls.get_regex_pattern_from_date_string(date_string)
+        regex_pattern_name, regex_pattern = (
+            cls.get_regex_pattern_from_date_string(date_string)
+        )
         match_pattern = re.match(regex_pattern, date_string.lower())
 
         if regex_pattern == cls.RE_PATTERN__DD_AL_DD_MONTH_DE_YYYY:
@@ -396,22 +512,26 @@ class BankAccountStatePDF(ABC):
             start_month = match_pattern.group(3)
             end_day = match_pattern.group(2)
             end_month = start_month
-            year = match_pattern.group(4)
+            start_year = match_pattern.group(4)
+            end_year = start_year
 
         elif (
             regex_pattern == cls.RE_PATTERN__DD_DE_MONTH_DE_YYYY
             or regex_pattern == cls.RE_PATTERN__DD_dash_MONTH_dash_YYYY
+            or regex_pattern == cls.RE_PATTERN__DD_DE_MM_DE_YY
         ):
             start_day = match_pattern.group(1)
             start_month = match_pattern.group(2)
-            year = match_pattern.group(3)
+            start_year = match_pattern.group(3)
+            end_year = start_year
 
         elif regex_pattern == cls.RE_PATTERN__DD_DE_MONTH_AL_DD_DE_MONTH_DE_YYYY:
             start_day = match_pattern.group(1)
             start_month = match_pattern.group(2)
             end_day = match_pattern.group(3)
             end_month = match_pattern.group(4)
-            year = match_pattern.group(5)
+            start_year = match_pattern.group(5)
+            end_year = start_year
 
         elif (
             regex_pattern == cls.RE_PATTERN__DD_DE_MONTH_DEL_YYYY_AL_DD_DE_MONTH_DEL_YYYY
@@ -419,33 +539,49 @@ class BankAccountStatePDF(ABC):
         ):
             start_day = match_pattern.group(1)
             start_month = match_pattern.group(2)
+            start_year = match_pattern.group(3)
             end_day = match_pattern.group(4)
             end_month = match_pattern.group(5)
-            year = match_pattern.group(6)
+            end_year = match_pattern.group(6)
 
         elif regex_pattern == cls.RE_PATTERN__DD_MMM_YYYY:
             start_day = match_pattern.group(1)
             start_month = match_pattern.group(2)
-            year = match_pattern.group(3)
+            start_year = match_pattern.group(3)
+            end_year = start_year
 
         elif regex_pattern == cls.RE_PATTERN__DD_MMM_YYYY_AL_DD_MMM_YYYY:
             start_day = match_pattern.group(1)
             start_month = match_pattern.group(2)
+            start_year = match_pattern.group(3)
             end_day = match_pattern.group(4)
             end_month = match_pattern.group(5)
-            year = match_pattern.group(6)
+            end_year = match_pattern.group(6)
 
-        elif regex_pattern == cls.RE_PATTERN__DD_slash_MM_slash_YYYY:
+        elif (
+            regex_pattern == cls.RE_PATTERN__DD_slash_MM_slash_YYYY or
+            regex_pattern == cls.RE_PATTERN__DD_slash_MM_slash_YY
+        ):
             start_day = match_pattern.group(1)
             start_month = match_pattern.group(2)
-            year = match_pattern.group(3)
+            start_year = match_pattern.group(3)
+            end_year = start_year
 
         elif regex_pattern == cls.RE_PATTERN__DD_slash_MM_slash_YYYY_AL_DD_slash_MM_slash_YYYY:
             start_day = match_pattern.group(1)
             start_month = match_pattern.group(2)
+            start_year = match_pattern.group(3)
             end_day = match_pattern.group(4)
             end_month = match_pattern.group(5)
-            year = match_pattern.group(6)
+            end_year = match_pattern.group(6)
+
+        elif regex_pattern == cls.RE_PATTERN__DD_slash_MM_slash_YY_AL_DD_slash_MM_slash_YY:
+            start_day = match_pattern.group(1)
+            start_month = match_pattern.group(2)
+            start_year = match_pattern.group(3)
+            end_day = match_pattern.group(4)
+            end_month = match_pattern.group(5)
+            end_year = match_pattern.group(6)
 
         if start_month in cls._SHORT_MONTH_MAPPING_ESP_TO_ENG:
             start_month = cls._SHORT_MONTH_MAPPING_ESP_TO_ENG[start_month]
@@ -453,11 +589,14 @@ class BankAccountStatePDF(ABC):
             end_month = cls._SHORT_MONTH_MAPPING_ESP_TO_ENG[end_month]
 
         return {
+            "regex_pattern_name": regex_pattern_name,
+            "regex_pattern": regex_pattern,
             "start_day": start_day,
             "start_month": start_month,
             "end_day": end_day,
             "end_month": end_month,
-            "year": year,
+            "start_year": start_year,
+            "end_year": end_year,
         }
 
     @classmethod
@@ -466,7 +605,7 @@ class BankAccountStatePDF(ABC):
         date_data = cls.get_datetime_data_from_date_string(date_string)
         day = date_data.get("start_day")
         month = date_data.get("start_month")
-        year = date_data.get("year")
+        start_year = date_data.get("start_year")
 
         # Convert month number to month name in Spanish
         # (to later one, convert the month name to English)
@@ -476,8 +615,16 @@ class BankAccountStatePDF(ABC):
         # Convert month name to English
         month = cls._MONTH_MAPPING_ESP_TO_ENG[month]
 
+        # if year is two digits, convert it to four digits format
+        if len(start_year) == 2:
+            start_year = (
+                f"20{start_year}"
+                if int(start_year) < 50
+                else f"19{start_year}"
+            )
+
         # Create datetime object
-        date_string = f"{day} {month} {year}"
+        date_string = f"{day} {month} {start_year}"
         datetime_object = datetime.strptime(date_string, "%d %B %Y")
 
         return datetime_object
@@ -512,7 +659,9 @@ class BankAccountStatePDF(ABC):
         if match_fecha_corte:
             fecha_de_corte = match_fecha_corte.group(1)
             self.raw_data["fecha_de_corte"] = fecha_de_corte
-            self.fecha_de_corte = self.format_date_string_into_datetime(fecha_de_corte)
+            self.fecha_de_corte = (
+                self.format_date_string_into_datetime(fecha_de_corte)
+            )
 
         if match_periodo:
             periodo = match_periodo.group(1)
@@ -537,7 +686,24 @@ class BankAccountStatePDF(ABC):
                 self.numero_de_tarjeta = match_numero_de_tarjeta.group(1)
 
     def __repr__(self):
+        """String representation of the object for debugging purposes.
+
+        Example:
+            <BbvaDebitPDF | PDF: 'bbva_debito__2024-07-17__JUL.pdf'>
+        """
         return (
             f"<{self.__class__.__name__}"
             f" | PDF: '{self.get_pdf_file_path()}'>"
         )
+
+
+class UnknownBankAccountStatePDF(BankAccountStatePDF):
+    """This class is used to represent a bank account state PDF file.
+    It is an abstract class that should be inherited by specific bank account state PDF classes.
+    """
+
+    BANK_NAME = "UnknownBank"
+    BANK_SHORT_NAME = "UnknownBank"
+    PDF_KEYWORDS = [
+        "banco",
+    ]

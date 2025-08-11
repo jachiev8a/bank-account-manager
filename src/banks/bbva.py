@@ -68,3 +68,25 @@ class BbvaCreditPDF(BankAccountStatePDF):
     def __init__(self, pdf_file_path: str, raw_file_contents: str = None):
         super().__init__(pdf_file_path, raw_file_contents)
         self.is_credit = True
+
+
+class BbvaCreditIpnPDF(BankAccountStatePDF):
+
+    BANK_NAME = "bbva"
+    BANK_SHORT_NAME = "bbva"
+    PDF_KEYWORDS = [
+        "Tarjeta IPN BBVA",
+    ]
+
+    ALL_KEYWORDS_SHOULD_BE_IN_PDF = True
+
+    PATTERN_FECHA_DE_CORTE = r"Fecha de Corte\s?\n+(.*)"
+    PATTERN_PERIODO = r"Periodo\s+Del\s+(\d{2}\/\d{2}\/\d{2}\s+al\s+\d{2}\/\d{2}\/\d{2})"
+
+    PATTERN_NUMERO_DE_CUENTA = r"Número de cliente:\s?(.*)"
+    PATTERN_NUMERO_DE_CLIENTE = r"Número de cliente:\s?(.*)"
+    PATTERN_NUMERO_DE_TARJETA = r"Número de tarjeta:\s?(.*)"
+
+    def __init__(self, pdf_file_path: str, raw_file_contents: str = None):
+        super().__init__(pdf_file_path, raw_file_contents)
+        self.is_credit = True
