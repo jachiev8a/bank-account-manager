@@ -47,10 +47,6 @@ Known bugs found by code review (static reading, not run against real PDFs).
 - **Problem:** `elif UnknownBankAccountStatePDF...: a = 0` — unrecognized PDFs are silently skipped.
 - **Fix idea:** Log the skipped file so new formats are noticed.
 
-### 7. README venv path mismatch
-- **Where:** `README.md`
-- **Problem:** Creates `.venv` but activates `venv\Scripts\activate` / `venv/bin/activate`.
-
 ## Missing feature
 
 ### Missing-months report

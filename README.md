@@ -17,9 +17,9 @@ You can use `venv` or `virtualenv` to create a virtual environment. Here is how 
 python -m venv .venv
 # Activate the virtual environment
 # On Windows
-venv\Scripts\activate
+.venv\Scripts\activate
 # On macOS/Linux
-source venv/bin/activate
+source .venv/bin/activate
 ```
 
 After activating the virtual environment, you can install the required libraries using pip.
