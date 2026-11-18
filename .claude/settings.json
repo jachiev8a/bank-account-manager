@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/*.pdf)",
+      "Read(**/*.PDF)",
+      "Read(./.tmp/**)"
+    ]
+  }
+}
