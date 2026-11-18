@@ -36,6 +36,11 @@ class BankAccountStatePDF(ABC):
     # limit
     MAX_LIMIT_TO_SEARCH_FOR_KEYWORDS = None
 
+    # report: split accounts by last 4 digits of card/account number.
+    # ponytail: off for all banks until the account/card number regexes are
+    # verified (Santander's grabs the wrong digits). Set True per bank once fixed.
+    SPLIT_REPORT_BY_NUMBER = False
+
     _SHORT_MONTH_MAPPING_ESP_TO_ENG = {
         'ene': 'enero',
         'feb': 'febrero',
@@ -176,6 +181,8 @@ class BankAccountStatePDF(ABC):
 
         self.is_duplicate = False
         self.is_ignored = False
+        # set by PDFBankAccountStateManager.build_output_project (.tmp copy)
+        self.output_file_path: Union[str, None] = None
         self.ignored_reason = ""
 
         # parse the pdf file and load the data into the instance

@@ -47,6 +47,7 @@ class PDFBankAccountStateManager:
         """
         self.bank_accounts_loaded: dict[str, BankAccountStatePDF] = {}
         self.bank_accounts_to_ignore: list[BankAccountStatePDF] = []
+        self.failed_files: list[tuple[str, str]] = []
         self.after_date_config: datetime.date = (
             settings.get_bank_account_after_date_config()
         )
@@ -137,7 +138,11 @@ class PDFBankAccountStateManager:
 
         for pdf_file_abspath in pdf_files_abspath_list:
             print(f"Processing PDF file: '{pdf_file_abspath}'")
-            self.load_bank_account_pdf_file(pdf_file_abspath)
+            try:
+                self.load_bank_account_pdf_file(pdf_file_abspath)
+            except Exception as exc:
+                print(f"[!] ERROR. Could not process '{pdf_file_abspath}': {exc}")
+                self.failed_files.append((pdf_file_abspath, str(exc)))
 
         print(
             "Finish Loading process. Total PDF bank accounts: "
@@ -301,6 +306,7 @@ class PDFBankAccountStateManager:
                         f"{bank_account_type}/"
                         f"{bank_account_obj.pdf_file_basename}"
                     )
+                    bank_account_obj.output_file_path = output_file_path
                     if not os.path.exists(output_file_path):
                         shutil.copyfile(
                             bank_account_obj.get_pdf_file_path(),

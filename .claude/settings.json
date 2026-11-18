@@ -3,6 +3,8 @@
     "deny": [
       "Read(**/*.pdf)",
       "Read(**/*.PDF)",
+      "Read(**/*.txt)",
+      "Read(**/*.json)",
       "Read(./.tmp/**)"
     ]
   }

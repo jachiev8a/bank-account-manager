@@ -2,17 +2,6 @@
 
 Known bugs found by code review (static reading, not run against real PDFs).
 
-## Priority
-
-### 1. One bad PDF aborts the whole run
-- **Where:** `src/banks/base_classes.py` — `_validate_fields` raises `RuntimeError` when
-  `fecha_de_corte` / `periodo_*` are missing; `get_regex_pattern_from_date_string` raises
-  `RuntimeError` for unsupported date formats.
-- **Problem:** Nothing in `src/` or `main.py` catches these. A single badly OCR'd or
-  new-format PDF stops processing of every file after it. Files already auto-renamed stay renamed.
-- **Fix idea:** Catch per-file in `PDFBankAccountStateManager.load_directories_to_search_for_pdfs`,
-  log the file + reason, and continue.
-
 ## Worth deciding
 
 ### 2. `bank_names_enabled` config is never read
@@ -29,6 +18,15 @@ Known bugs found by code review (static reading, not run against real PDFs).
   Citibanamex Costco statements (2024) are not detected at all.
 - **Fix idea:** Wire `CitiBanamexCreditCostcoPDF` into the detection chain if those PDFs
   matter; delete the 2025 duplicate.
+
+### Santander account-number regex grabs the wrong digits
+- **Where:** `src/banks/santander.py` — `PATTERN_NUMERO_DE_CUENTA` (text and image variants)
+- **Problem:** Captures the line after "SUPERCUENTA CHEQUES-SALDO PROM", which holds other
+  figures (likely the average balance), so the report's last 4 digits change per statement.
+- **Workaround:** `SPLIT_REPORT_BY_NUMBER = False` in `BankAccountStatePDF` (all banks), so the
+  report groups by bank + type only.
+- **Fix idea:** Rewrite the regex using a masked sample of that line; verify the other banks'
+  number regexes too, then set `SPLIT_REPORT_BY_NUMBER = True` per bank that's verified.
 
 ## Cleanup
 
@@ -47,10 +45,10 @@ Known bugs found by code review (static reading, not run against real PDFs).
 - **Problem:** `elif UnknownBankAccountStatePDF...: a = 0` — unrecognized PDFs are silently skipped.
 - **Fix idea:** Log the skipped file so new formats are noticed.
 
-## Missing feature
+## Report (`src/report.py`)
 
-### Missing-months report
-The original goal (detect which monthly statements are missing) is not implemented.
-The data is already there (`periodo_inicio`, bank, account type); needs a step that lists,
-per bank + account type, months with no statement between the first and last one found
-(or a configured range).
+- Month = `periodo_inicio` month (same as file naming). Revisit: credit cards may read
+  better by `fecha_de_corte` month.
+- Accounts split by last 4 digits of card/account number. If OCR misreads them, a statement
+  shows up as its own one-month account; fallback is grouping by bank + type only.
+- Next iteration (if wanted): local web server with re-scan button / notes per month.

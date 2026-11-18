@@ -1,11 +1,11 @@
 
 directory_list_to_look_for_pdfs:
   - ~/Downloads
-  - ~/Downloads/Edos-Cuenta
+#  - ~/Downloads/Edos-Cuenta
   #- ~/Downloads/TESTS
 
-get_bank_accounts_after_date: 2025-01-01
-# get_bank_accounts_before_date: 2025-01-01
+get_bank_accounts_after_date: 2026-01-01
+get_bank_accounts_before_date: 2027-01-01
 
 # ---------------------------------------------------------
 # The following are the bank account types that the program
